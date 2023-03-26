@@ -47,6 +47,7 @@ def start_canvas1():
     # plt.show(block=False)
     disconnect_zoom = zoom_factory(ax)
     pan_handler = panhandler(fig)
+    plt.title('Click on the first end city you would like to raid')
     plt.show()
     # draw_tour()
 
