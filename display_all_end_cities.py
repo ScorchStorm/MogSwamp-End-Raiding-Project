@@ -1,133 +1,117 @@
 import gspread # from https://github.com/burnash/gspread
 from matplotlib import pyplot as plt
-from matplotlib.lines import Line2D
 from mpl_interactions import panhandler, zoom_factory # from https://mpl-interactions.readthedocs.io/en/stable/examples/zoom-factory.html
-from time import sleep
 
-waypoint_file = 'C:\Users\Matthew\curseforge\minecraft\Instances\Xareos Minimap and Worldmap\XaeroWaypoints\Multiplayer_mogswamp.apexmc.co\dim%1\mw$default_1.txt'
+# Change the link below to match the address of your waypoint file for Xaeros Minimap
+waypoint_file = r'C:\Users\Matthew\curseforge\minecraft\Instances\Xareos Minimap and Worldmap\XaeroWaypoints\Multiplayer_mogswamp.apexmc.co\dim%1\mw$default_1.txt'
+n_waypoints = 12 # this is the default number of cities to display all at once because it's the most colors you can have in a rainbow sequence
+assume_raided = 40000 # the programs assumes that cities closer to spawn than this are already raided
 
 def main():
-    global worksheet, gc, all_cities_x,all_cities_y, n_cities
+    get_end_cities()
+    print('Click on the first end city you would like to raid')
+    choose_first_end_city()
+
+def get_end_cities():
+    global worksheet, gc, unraided_cities_x, unraided_cities_z, n_cities, raided_cities_x, raided_cities_z
     n_cities = int(input('How many cities would you like to end raid? '))
     print('Getting coordinates from server spreadsheet')
     gc = gspread.service_account('credentials2.json')
     worksheet = gc.open_by_key('1SASg6rYtYl2TeVTvBCNOnW6IyzbBjSlzolsEil9JPZQ').sheet1
-    print(f'worksheet = {worksheet}')
-    all_cities_x = list(map(int, worksheet.col_values(1)[1:])) # Get all values from the first column
-    all_cities_y = list(map(int, worksheet.col_values(2)[1:])) # Get all values from the second column
-    print('Click on the first end city you would like to raid')
-    start_canvas1()
+    unraided_cities_x = list(map(int, worksheet.col_values(1)[1:])) # Get all values from the first column
+    unraided_cities_z = list(map(int, worksheet.col_values(2)[1:])) # Get all values from the second column
+    raided_cities_x = []
+    raided_cities_z = []
+    total_cities = len(unraided_cities_x)
+    for i in range(total_cities):
+        n = i-len(raided_cities_x)
+        city_x = unraided_cities_x[n]
+        city_z = unraided_cities_z[n]
+        if abs(city_x) < assume_raided and abs(city_z) < assume_raided: # if either of the city's coordinates alone puts it further from spawn than assume_raided, don't even bother finding the total distance
+            dist = (city_x*city_x + city_z*city_z)**0.5
+            if dist < assume_raided:
+                raided_cities_x.append(city_x) # add the x coordinate to the list of raided cities
+                raided_cities_z.append(city_z) # add the z coordinate to the list of raided cities
+                del unraided_cities_x[n] # remove the x coordinate from the list of unraided cities
+                del unraided_cities_z[n] # remove the z coordinate from the list of unraided cities
 
-def start_canvas1():
+def choose_first_end_city():
     global fig, ax, ax2background, points
     plt.ioff()
     fig, ax = plt.subplots(1, 1, figsize=((6.5,6)))
-    fig.canvas.mpl_connect('pick_event', onpick) # necessary
+    fig.canvas.mpl_connect('pick_event', click_city) # when you cick on an end city, this function is called, which helps find a path
     ax.set_aspect('equal')
     plt.xlabel("X-axis")
     plt.ylabel("Y-axis")
-    max_x, min_x,  max_y, min_y = 25000, -25000,  25000, -25000
-    # city_x, city_y = closest_cities(max_x, min_x, max_y, min_y)
-    city_x1, city_y1 = all_cities_x, all_cities_y
-    # points, = ax.scatter(city_x, city_y, [7 for _ in range(len(city_x))], [[0,0,0] for _ in range(len(city_x))], picker=True)
-    points1 = ax.scatter(city_x1, city_y1, [7 for _ in range(len(city_x1))], [[0,0,0] for _ in range(len(city_x1))], picker=True)
-    # points = ax.plot(city_x, city_y, 'k.')
-    points, = ax.plot([])
-    # ax.plot(city_x, city_y, picker=True)
-    # max_x, min_x,  max_y, min_y =  max(city_x)/5, min(city_x)/5, max(city_y)/5, min(city_y)/5
-    # width = max_x - min_x
-    # height = max_y - min_y
-    ax.set(xlim=(min_x, max_x), ylim=(min_y, max_y))
+    edge = 1.5*assume_raided
+    max_x, min_x, max_z, min_z = edge, -edge, edge, -edge
+    city_x1, city_z1 = unraided_cities_x, unraided_cities_z
+    ax.scatter(city_x1, city_z1, [7 for _ in range(len(city_x1))], [[0,0,0] for _ in range(len(city_x1))], picker=True, label='unraided_cities')
+    ax.scatter(raided_cities_x, raided_cities_z, [7 for _ in range(len(raided_cities_x))], [[1,0,0] for _ in range(len(raided_cities_x))], label = 'raided_cities')
+    ax.plot([])
+    ax.set(xlim=(min_x, max_x), ylim=(min_z, max_z))
     fig.canvas.draw()
     fig.canvas.manager.window.wm_geometry("+%d+%d" % (0, 0)) # move figure to top right of screen
     ax2background = fig.canvas.copy_from_bbox(ax.bbox)
-    # fig.canvas.blit(ax.bbox)
-    # fig.canvas.flush_events()
-    # fig.canvas.resize_event()
-    # plt.show(block=False)
-    disconnect_zoom = zoom_factory(ax)
-    pan_handler = panhandler(fig)
-    plt.title('Click on the first end city you would like to raid')
+    zoom_factory(ax)
+    panhandler(fig)
+    plt.title('Click on the First End City You Would Like to Raid')
+    plt.legend()
     plt.show()
-    # draw_tour()
 
-# def draw_tour():
-#     while True:
-#         fig.canvas.restore_region(ax2background)
-#         max_x, min_x = ax.get_xlim()
-#         max_y, min_y = ax.get_ylim()
-#         city_x, city_y = closest_cities(max_x, min_x, max_y, min_y)
-#         points.set_data(city_x, city_y)
-#         ax.draw_artist(points)
-#         fig.canvas.blit(ax.bbox)
-#         fig.canvas.flush_events()
-#         fig.canvas.resize_event()
-#         print('hi')
-
-def onpick(event):
-    global all_cities_x, all_cities_y
+def click_city(event): # when you click on your first city, this function is called
+    global unraided_cities_x, unraided_cities_z
     if event.mouseevent.button == 1:
         ind = event.ind
-        # print(f'ind = {ind}')
-        first_city_x, first_city_y = all_cities_x[ind[0]], all_cities_y[ind[0]]
-        print(f'You have picked your first city to be at {all_cities_x[ind[0]], all_cities_y[ind[0]]}')
-        path = get_a_path(first_city_x, first_city_y)
+        first_city_x, first_city_z = unraided_cities_x[ind[0]], unraided_cities_z[ind[0]]
+        print(f'You have picked your first city to be at {unraided_cities_x[ind[0]], unraided_cities_z[ind[0]]}')
+        path = get_a_path(first_city_x, first_city_z) # this finds a path that you will use for end raiding
 
-def closest_cities(max_x, min_x, max_y, min_y, cities_x, cities_y):
-    # global city_x, city_y, city_list
+def closest_cities(max_x, min_x, max_z, min_z, cities_x, cities_z):
     city_x = []
-    city_y = []
+    city_z = []
     city_list = []
     for n in range(len(cities_x)):
-        if min_x < cities_x[n] < max_x and min_y < cities_y[n] < max_y:
+        if min_x < cities_x[n] < max_x and min_z < cities_z[n] < max_z:
             x = int(cities_x[n])
-            y = int(cities_y[n])
+            z = int(cities_z[n])
             city_x.append(x)
-            city_y.append(y)
-            city_list.append([x, y])
-    return city_x, city_y, city_list
+            city_z.append(z)
+            city_list.append([x, z])
+    return city_x, city_z, city_list
 
-def get_a_path(first_city_x, first_city_y):
+def get_a_path(first_city_x, first_city_z):
     plt.close()
-    # n_cities = int(input('How many cities would you like to end raid? '))
     limit = 2000 * n_cities ** 0.5 + 80 * n_cities
-    max_x, min_x, max_y, min_y = first_city_x + limit, first_city_x - limit, first_city_y + limit, first_city_y - limit
-    global city_x, city_y, city_list
+    max_x, min_x, max_z, min_z = first_city_x + limit, first_city_x - limit, first_city_z + limit, first_city_z - limit
+    global city_x, city_z, city_list
     incrase = 1.2 # increases the cities around the border of the selected path which can be selected later on
-    city_x, city_y, city_list = closest_cities(1.2*max_x, 1.2*min_x, 1.2*max_y, 1.2*min_y, all_cities_x, all_cities_y)
+    city_x, city_z, city_list = closest_cities(incrase*max_x, incrase*min_x, incrase*max_z, incrase*min_z, unraided_cities_x, unraided_cities_z)
     start_canvas()
     city_indexes = get_city_indexes()
-    # global city_x, city_y, city_list
-    list, city_list = limited_nn_algorithm(city_list.index([first_city_x, first_city_y]), city_indexes.copy(), n_cities)
-    city_x, city_y = [c[0] for c in city_list], [c[1] for c in city_list]
-    city_list = [[city_x[n], city_y[n]] for n in range(len(city_x))]
-    # print(f'list = {list}')
+    list, city_list = limited_nn_algorithm(city_list.index([first_city_x, first_city_z]), city_indexes.copy(), n_cities)
+    city_x, city_z = [c[0] for c in city_list], [c[1] for c in city_list]
+    city_list = [[city_x[n], city_z[n]] for n in range(len(city_x))]
     make_distance_array()
     original_distance = find_total_distance(list)
     plt.close()
     start_canvas()
     tour, what = use_all_methods(list, original_distance, 1, original_distance, len(list))
     print(f'city_coordinates = ({[city_list[city] for city in tour]}')
-    # print(f'closest_cities_x = {city_x}')
-    # print(f'closest_cities_y = {city_y}')
-    # print(f'{[city_list[c][0] for c in tour]}')
-    # print(f'{[x for x in city_x]}')
-    print(f'closest_cities_x = {[x for x in city_x if x not in (city_list[c][0] for c in tour)]}')
-    print(f'closest_cities_y = {[y for y in city_y if y not in (city_list[c][1] for c in tour)]}')
     update_waypoints(tour)
     plt.close()
 
 def update_waypoints(tour): # this functions updates the waypoints as users tell the program that they have visited the cities
-    n_waypoints = 12 # this is the default number of cities to display all at once because it's the most colors you can have in a rainbow sequence
-    for n in range(len(tour)//n_waypoints):
-        create_waypoint_text(n_waypoints, tour[n*n_waypoints:(n+1)*n_waypoints]) # ths will probably need to be adjusted layer for the lst bath of points in a tour, which might not be divisible by 12
+    for n in range(1+len(tour)//n_waypoints):
+        create_waypoint_text(tour[n*n_waypoints:(n+1)*n_waypoints]) # ths will probably need to be adjusted layer for the lst bath of points in a tour, which might not be divisible by 12
+        next = input('Hit enter when you want to display the next set of waypoints')
 
-def create_waypoint_text(number, next_tour_points):
+def create_waypoint_text(next_tour_points):
     colors = [4,12,6,14,10,2,11,3,9,1,13,5,0,8,7,15]
     waypoint_text_lines = ['#','#waypoint:name:initials:x:y:z:color:disabled:type:set:rotate_on_tp:tp_yaw:visibility_type:destination','#']
-    for n in range(len(number)):
-        x, y = city_list[next_tour_points[n]]
-        waypoint_text_lines.append(f'waypoint:{n}:{n}:{x}:{y}:200:{colors[n]}:false:0:gui.xaero_default:false:0:0:false')
+    for n in range(len(next_tour_points)):
+        x, z = city_list[next_tour_points[n]]
+        waypoint_text_lines.append(f'waypoint:{n}:{n}:{x}:150:{z}:{colors[n]}:false:0:gui.xaero_default:false:0:0:false')
     with open(waypoint_file, "r+") as f:
         for text_line in waypoint_text_lines:
             f.writelines(text_line)
@@ -163,8 +147,8 @@ def make_relative_distance_lists(city_indexes, city_1):
     '''distances = [[x_coord, y_coord], distance]'''
     for city_2 in city_indexes:
         x = city_list[city_2][0] - city_list[city_1][0]
-        y = city_list[city_2][1] - city_list[city_1][1]
-        distances.append([x * x + y * y, city_2])
+        z = city_list[city_2][1] - city_list[city_1][1]
+        distances.append([x * x + z * z, city_2])
     return distances
 
 def use_all_methods(shortest_points, old_shortest_distance, number, original_distance, number_of_points):
@@ -200,8 +184,8 @@ def make_distance_array():
         distance_list = []
         for city_2 in city_list:
             x = (city_1[0]-city_2[0])
-            y = (city_1[1]-city_2[1])
-            distance_list.append((x * x + y * y) ** 0.5)
+            z = (city_1[1]-city_2[1])
+            distance_list.append((x * x + z * z) ** 0.5)
         distance_array.append(distance_list)
 
 def move_list(points, i, s, n): # i = list_start_index, s = list_length, n = This is the index where the list is being moved to
@@ -260,7 +244,7 @@ def shift_sections(points, number_of_points, old_shortest_distance, original_dis
                     distance_saved = old_distance - new_distance
                     if 0 < distance_saved:
                         shifted_points, moved_list = move_list(points.copy(), i, s, n)
-                        is_shorter, new_shortest_distance, number = report_progress('Shift Section', shifted_points, number, original_distance, number_of_points, old_shortest_distance, i, n, distance_saved)
+                        is_shorter, new_shortest_distance, number = report_progress(shifted_points, number, number_of_points, old_shortest_distance, i, n, distance_saved)
                         if is_shorter:
                             if i == 0 and n < f and s != f:
                                 draw_tour(new_shortest_distance, original_distance, 'Shift Section', shifted_points, [points[n-1], moved_list[0]], [moved_list[-1], points[n]], [])
@@ -308,7 +292,7 @@ def switchblade(points, number_of_points, old_shortest_distance, original_distan
             distance_saved = old_distance - new_distance
             if 0 < distance_saved:
                 switched_points = reverse_list(points.copy(), new_distance, i, n)
-                is_shorter, new_shortest_distance, number = report_progress('Switchblade', switched_points, number, original_distance, number_of_points, old_shortest_distance, i, n, distance_saved)
+                is_shorter, new_shortest_distance, number = report_progress(switched_points, number, number_of_points, old_shortest_distance, i, n, distance_saved)
                 if is_shorter:
                     if i == 0:
                         draw_tour(new_shortest_distance, original_distance, 'Flip Segments', switched_points, [points[i], points[n]], [], [])
@@ -317,7 +301,7 @@ def switchblade(points, number_of_points, old_shortest_distance, original_distan
                     return switchblade(switched_points, number_of_points, new_shortest_distance, original_distance, number)
     return points, old_shortest_distance, number - 1
 
-def report_progress(name, switched_points, number, original_distance, number_of_points, old_shortest_distance, i, n, distance_saved):
+def report_progress(switched_points, number, number_of_points, old_shortest_distance, i, n, distance_saved):
     new_shortest_distance = find_total_distance(switched_points) # Remove this line when you feel that the code is ready
     if len(switched_points) != number_of_points:
         print('There has been an error. A point has been lost')
@@ -325,18 +309,9 @@ def report_progress(name, switched_points, number, original_distance, number_of_
         return False, old_shortest_distance, number
     if round(new_shortest_distance,7) != round(old_shortest_distance - distance_saved,7):
         print('There was an error. the change in distance was not what we expected it to be.')
-        # print(f'old_shortest_distance = {old_shortest_distance}')
-        # print(f'new_shortest_distance = {new_shortest_distance}')
-        # print(f'find_total_distance(switched_points) = {find_total_distance(switched_points)}')
-        # print(f'old_shortest_distance - distance_saved = {old_shortest_distance - distance_saved}')
-        # print(f'distance_saved = {distance_saved}')
         print(f'{new_shortest_distance} != {old_shortest_distance - distance_saved}')
     if new_shortest_distance < old_shortest_distance:
-        # print(f'\n{name} Optimization number {number}:')
         print(f'Congrats! We found a new shorter path with a distance of {new_shortest_distance}')
-        # print(f'This optimization makes it {(old_shortest_distance - new_shortest_distance):.4f} shorter than the last path!')
-        # print(f'The path is now {100*(1 - new_shortest_distance/original_distance):.4f}% shorter than the original path!')
-        # print(f'The path is now {(original_distance - new_shortest_distance):.4f} shorter than the original path!')
         number += 1
         return True, new_shortest_distance, number
     else:
@@ -362,12 +337,8 @@ def find_total_distance(list): #This is meant for lists of points only
 
 def extract_points(list):
     list_x = [city_list[city][0] for city in list]
-    list_y = [city_list[city][1] for city in list]
-    # for city in list:
-    #     point = city_list[city]
-    #     list_x.append(point[0])
-    #     list_y.append(point[1])
-    return list_x, list_y
+    list_z = [city_list[city][1] for city in list]
+    return list_x, list_z
 
 def get_city_indexes():
     return list(range(len(city_list)))
@@ -378,7 +349,6 @@ def update_title(new_shortest_distance, original_distance, algorithm_name):
     fig.canvas.flush_events()
 
 def draw_nearest_neighbor(tour):
-    # global fig, ax, line1, ax2background
     line1.set_data(extract_points(tour))
     fig.canvas.restore_region(ax2background)
     ax.draw_artist(line1)
@@ -386,7 +356,6 @@ def draw_nearest_neighbor(tour):
     fig.canvas.flush_events()
 
 def draw_tour(new_shortest_distance, original_distance, algorithm_name, blue_line, first_red_segment, second_red_segment = None, third_red_segment = None):
-    # global fig, ax, line1, line2, line3, line4, ax2background
     fig.canvas.restore_region(ax2background)
     line1.set_data(extract_points(blue_line))
     ax.draw_artist(line1)
@@ -413,18 +382,20 @@ def start_canvas():
     ax.set_aspect('equal')
     plt.xlabel("X-axis")
     plt.ylabel("Y-axis")
-    city_x, city_y = extract_points(get_city_indexes())
+    city_x, city_z = extract_points(get_city_indexes())
     line1, = ax.plot([])
     line2, = ax.plot([])
     line3, = ax.plot([])
     line4, = ax.plot([])
-    max_x, min_x,  max_y, min_y =  max(city_x), min(city_x), max(city_y), min(city_y)
-    o_city_x, o_city_y, o_cities = closest_cities(max_x, min_x, max_y, min_y, all_cities_x, all_cities_y)
-    ax.plot(o_city_x, o_city_y, 'y.')
-    ax.plot(city_x, city_y, 'k.')
+    max_x, min_x,  max_z, min_z =  max(city_x), min(city_x), max(city_z), min(city_z)
+    o_city_x, o_city_z, o_cities = closest_cities(max_x, min_x, max_z, min_z, unraided_cities_x, unraided_cities_z)
+    ax.plot(o_city_x, o_city_z, 'y.')
+    ax.plot(city_x, city_z, 'k.')
+    r_city_x, r_city_z, r_cities = closest_cities(max_x, min_x, max_z, min_z, raided_cities_x, raided_cities_z)
+    ax.plot(r_city_x, r_city_z, 'r.')
     width = max_x - min_x
-    height = max_y - min_y
-    ax.set(xlim=(min_x - width*0.05, max_x + width*0.05,), ylim=(min_y - height*0.05, max_y + height*0.05))
+    height = max_z - min_z
+    ax.set(xlim=(min_x - width*0.05, max_x + width*0.05,), ylim=(min_z - height*0.05, max_z + height*0.05))
     fig.canvas.draw()
     move_figure(fig, 0, 0)
     ax2background = fig.canvas.copy_from_bbox(ax.bbox)
@@ -474,7 +445,7 @@ def rearrange_points(points, number_of_points, old_shortest_distance, original_d
                     points_copy = points.copy()
                     points_copy.remove(points[i])
                     points_copy.insert(n, points[i])
-                    is_shorter, new_shortest_distance, number = report_progress('Rearrange Points', points_copy, number, original_distance, number_of_points, old_shortest_distance, i, n, distance_saved)
+                    is_shorter, new_shortest_distance, number = report_progress(points_copy, number, number_of_points, old_shortest_distance, i, n, distance_saved)
                     if is_shorter and 0 < i < f and 0 < n < f:
                         draw_tour(new_shortest_distance, original_distance, 'Rearrange Points', points_copy, [points_copy[n-1], points_copy[n], points_copy[n+1]],[points[i-1], points[i+1]], [])
                     return rearrange_points(points_copy, number_of_points, new_shortest_distance, original_distance, number)
