@@ -1,8 +1,9 @@
 import gspread
 from matplotlib import pyplot as plt
 from mpl_interactions import panhandler, zoom_factory
-import time
 import numexpr as ne
+import numpy as np
+import time
 
 np.set_printoptions(precision = 7, suppress = True, linewidth = 170)
 
@@ -372,3 +373,4 @@ def create_waypoint_text(next_tour_points):
 
 if __name__ == "__main__":
     main()
+
