@@ -1,16 +1,15 @@
 import gspread
 from matplotlib import pyplot as plt
 from mpl_interactions import panhandler, zoom_factory
-import numexpr as ne
 import numpy as np
 import time
+import numexpr as ne
 
 np.set_printoptions(precision = 7, suppress = True, linewidth = 170)
 
 # Change the file path below to match the file path of your waypoint file for Xaeros Minimap
 waypoint_file = r'C:\Users\User\curseforge\minecraft\Instances\Xareos Minimap and Worldmap\XaeroWaypoints\Multiplayer_mogswamp.apexmc.co\dim%1\mw$default_1.txt'
 n_waypoints = 12 # this is the default number of cities to display all at once because it's the most colors you can have in a rainbow sequence
-assume_raided = 40000 # the programs assumes that cities closer to spawn than this are already raided
 
 def main():
     print('Click on the first end city you would like to raid')
@@ -23,18 +22,6 @@ def get_end_cities():
     unraided_cities_x, unraided_cities_z = get_server_end_cities()
     raided_cities_x = []
     raided_cities_z = []
-    total_cities = len(unraided_cities_x)
-    for i in range(total_cities):
-        n = i-len(raided_cities_x)
-        city_x = unraided_cities_x[n]
-        city_z = unraided_cities_z[n]
-        if abs(city_x) < assume_raided and abs(city_z) < assume_raided: # if either of the city's coordinates alone puts it further from spawn than assume_raided, don't even bother finding the total distance
-            dist = (city_x*city_x + city_z*city_z)**0.5
-            if dist < assume_raided:
-                raided_cities_x.append(city_x) # add the x coordinate to the list of raided cities
-                raided_cities_z.append(city_z) # add the z coordinate to the list of raided cities
-                del unraided_cities_x[n] # remove the x coordinate from the list of unraided cities
-                del unraided_cities_z[n] # remove the z coordinate from the list of unraided cities
 
 def get_server_end_cities():
     print('Getting coordinates from server spreadsheet')
@@ -52,8 +39,9 @@ def choose_first_end_city():
     ax.set_aspect('equal')
     plt.xlabel("X-axis")
     plt.ylabel("Y-axis")
-    edge = 1.5*assume_raided
-    max_x, min_x, max_z, min_z = edge, -edge, edge, -edge
+    print(f'{len(unraided_cities_x) = }')
+    print(f'{len(unraided_cities_z) = }')
+    max_x, min_x, max_z, min_z = max(unraided_cities_x), min(unraided_cities_x), max(unraided_cities_z), min(unraided_cities_z)
     ax.scatter(unraided_cities_x, unraided_cities_z, [7 for _ in range(len(unraided_cities_x))], [[0,0,0] for _ in range(len(unraided_cities_z))], picker=True, label='unraided_cities')
     ax.scatter(raided_cities_x, raided_cities_z, [7 for _ in range(len(raided_cities_x))], [[1,0,0] for _ in range(len(raided_cities_x))], label = 'raided_cities')
     ax.plot([])
@@ -373,4 +361,3 @@ def create_waypoint_text(next_tour_points):
 
 if __name__ == "__main__":
     main()
-
