@@ -39,8 +39,6 @@ def choose_first_end_city():
     ax.set_aspect('equal')
     plt.xlabel("X-axis")
     plt.ylabel("Y-axis")
-    print(f'{len(unraided_cities_x) = }')
-    print(f'{len(unraided_cities_z) = }')
     max_x, min_x, max_z, min_z = max(unraided_cities_x), min(unraided_cities_x), max(unraided_cities_z), min(unraided_cities_z)
     ax.scatter(unraided_cities_x, unraided_cities_z, [7 for _ in range(len(unraided_cities_x))], [[0,0,0] for _ in range(len(unraided_cities_z))], picker=True, label='unraided_cities')
     ax.scatter(raided_cities_x, raided_cities_z, [7 for _ in range(len(raided_cities_x))], [[1,0,0] for _ in range(len(raided_cities_x))], label = 'raided_cities')
@@ -361,3 +359,4 @@ def create_waypoint_text(next_tour_points):
 
 if __name__ == "__main__":
     main()
+
