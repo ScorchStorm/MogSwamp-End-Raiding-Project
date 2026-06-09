@@ -19,17 +19,41 @@ def main():
 def get_end_cities():
     global n_cities, unraided_cities_x, unraided_cities_z, raided_cities_x, raided_cities_z
     n_cities = int(input('How many cities would you like to end raid? '))
-    unraided_cities_x, unraided_cities_z = get_server_end_cities()
-    raided_cities_x = []
-    raided_cities_z = []
+    unraided_cities_x, unraided_cities_z, raided_cities_x, raided_cities_z = get_server_end_cities()
 
-def get_server_end_cities():
+def get_server_end_cities(): # made with some help from Gemini
     print('Getting coordinates from server spreadsheet')
     gc = gspread.service_account('credentials2.json')
     worksheet = gc.open_by_key('1SASg6rYtYl2TeVTvBCNOnW6IyzbBjSlzolsEil9JPZQ').sheet1
-    unraided_cities_x = list(map(int, worksheet.col_values(1)[1:])) # Get all values from the first column
-    unraided_cities_z = list(map(int, worksheet.col_values(2)[1:])) # Get all values from the second column
-    return unraided_cities_x, unraided_cities_z
+    rows = worksheet.get_all_values()[1:]
+    unraided_cities_x, unraided_cities_z, raided_cities_x, raided_cities_z = [], [], [], []
+    for row in rows:
+        if row[2] != '': # if the 3rd item in an end city's row is not blank, the city has been raided
+            raided_cities_x.append(int(row[0]))
+            raided_cities_z.append(int(row[1]))
+        else:
+            unraided_cities_x.append(int(row[0]))
+            unraided_cities_z.append(int(row[1]))
+    print(f'{len(unraided_cities_x) = }')
+    print(f'{len(raided_cities_x) = }')
+    return unraided_cities_x, unraided_cities_z, raided_cities_x, raided_cities_z
+
+def mark_tour_as_raided(tour): # made with help from Gemini
+    print('Updating server spreadsheet with raided cities...')
+    gc = gspread.service_account('credentials2.json')
+    worksheet = gc.open_by_key('1SASg6rYtYl2TeVTvBCNOnW6IyzbBjSlzolsEil9JPZQ').sheet1
+    batch_data = []
+    for city_index in tour:
+        row_number = city_index + 2 
+        batch_data.append({
+            'range': f'C{row_number}',  # Column C is 'raided?'
+            'values': [['raided']]       # Must be a 2D array for gspread
+        })
+    if batch_data: # Send all updates to Google Sheets in one single network request
+        worksheet.batch_update(batch_data)
+        print(f'Successfully marked {len(tour)} cities as raided!')
+    else:
+        print('No cities to update.')
 
 def choose_first_end_city():
     global fig, ax, ax2background
@@ -341,17 +365,22 @@ def correct_starting_point(tour): # this isn't currently being used
     if distance_to_start > distance_to_end:
         return tour[::-1]
 
-def update_waypoints(tour): # this functions updates the waypoints as users tell the program that they have path the cities
+def update_waypoints(tour): # this functions updates the waypoints as users tell the program that they have visited the cities
     for n in range(1+len(tour)//n_waypoints):
-        create_waypoint_text(tour[n*n_waypoints:(n+1)*n_waypoints]) # ths will probably need to be adjusted layer for the lst bath of points in a tour, which might not be divisible by 12
+        create_waypoint_text(tour[n*n_waypoints:(n+1)*n_waypoints]) # ths will probably need to be adjusted later for the 1st batch of points in a tour, which might not be divisible by 12
         next = input(f'\nHit enter when you want to display the next set of waypoints')
+        mark_tour_as_raided(tour[n*n_waypoints:(n+1)*n_waypoints])
+        # gc = gspread.service_account('credentials2.json')
+        # worksheet = gc.open_by_key('1SASg6rYtYl2TeVTvBCNOnW6IyzbBjSlzolsEil9JPZQ').sheet1
+        # for city_index in tour:
+        #     worksheet.update(f'B{city_index + 2}', 'raided')
 
-def create_waypoint_text(next_tour_points):
+def create_waypoint_text(next_tour_points): # this deletes all end waypoints and makes new ones
     colors = [4,12,6,14,10,2,11,3,9,1,13,5,0,8,7,15]
     waypoint_text_lines = ['#','#waypoint:name:initials:x:y:z:color:disabled:type:set:rotate_on_tp:tp_yaw:visibility_type:destination','#']
     for n in range(len(next_tour_points)):
         x, z = city_list[next_tour_points[n]]
-        waypoint_text_lines.append(f'waypoint:{n}:{n}:{x}:150:{z}:{colors[n]}:false:0:gui.xaero_default:false:0:0:false')
+        waypoint_text_lines.append(f'waypoint:{n+1}:{n+1}:{x}:130:{z}:{colors[n]}:false:0:gui.xaero_default:false:0:0:false')
     with open(waypoint_file, "r+") as f:
         for text_line in waypoint_text_lines:
             f.writelines(text_line)
@@ -359,4 +388,3 @@ def create_waypoint_text(next_tour_points):
 
 if __name__ == "__main__":
     main()
-
