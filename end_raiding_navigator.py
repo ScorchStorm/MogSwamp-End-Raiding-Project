@@ -49,8 +49,8 @@ def choose_first_end_city():
     fig, ax = plt.subplots(1, 1, figsize=((6.5,6)))
     fig.canvas.mpl_connect('pick_event', click_city) # when you cick on an end city, this function is called, which helps find a path
     ax.set_aspect('equal')
-    plt.xlabel("X-axis")
-    plt.ylabel("Y-axis")
+    plt.xlabel("X-Axis")
+    plt.ylabel("Z-Axis")
     max_x, min_x, max_z, min_z = max(unraided_cities_x), min(unraided_cities_x), max(unraided_cities_z), min(unraided_cities_z)
     border = (max_x - min_x + max_z - min_z)/150 + 500
     ax.scatter(unraided_cities_x, unraided_cities_z, [7 for _ in range(len(unraided_cities_x))], [[0,0,0] for _ in range(len(unraided_cities_z))], picker=True, label='unraided_cities')
@@ -128,8 +128,8 @@ def start_canvas(path_city_x, path_city_z, city_x, city_z, tour = []):
     ax = fig.add_subplot(1, 1, 1)
     suptitle = fig.suptitle(70*" "+"\n"+70*" ") # A long blank title that takes up two lines
     ax.set_aspect('equal')
-    plt.xlabel("X-axis")
-    plt.ylabel("Z-axis")
+    plt.xlabel("X-Axis")
+    plt.ylabel("Z-Axis")
     line1, = ax.plot([])
     line2, = ax.plot([])
     line3, = ax.plot([])
