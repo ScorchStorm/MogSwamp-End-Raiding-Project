@@ -1,11 +1,10 @@
 import gspread
 from matplotlib import pyplot as plt
 from mpl_interactions import panhandler, zoom_factory
-import numpy as np
-import time
 import numexpr as ne
+import numpy as np
 
-np.set_printoptions(precision = 7, suppress = True, linewidth = 170)
+np.set_printoptions(precision = 7, suppress = True, linewidth = 170) # this is just my personal preference for how I like numpy to print numbers
 
 # Change the file path below to match the file path of your waypoint file for Xaeros Minimap
 waypoint_file = r'C:\Users\User\curseforge\minecraft\Instances\Xareos Minimap and Worldmap\XaeroWaypoints\Multiplayer_mogswamp.apexmc.co\dim%1\mw$default_1.txt'
@@ -15,45 +14,34 @@ def main():
     print('Click on the first end city you would like to raid')
     get_end_cities()
     choose_first_end_city()
+    print(f'Congrats! You have raided all {n_cities} end cities!')
 
 def get_end_cities():
-    global n_cities, unraided_cities_x, unraided_cities_z, raided_cities_x, raided_cities_z
-    n_cities = int(input('How many cities would you like to end raid? '))
-    unraided_cities_x, unraided_cities_z, raided_cities_x, raided_cities_z = get_server_end_cities()
+    global n_cities
+    n_cities = int(input('How many end cities would you like to raid? '))
+    get_server_end_cities()
+    if len(unraided_cities_x) < n_cities:
+        print(f'Sorry, there are not enough unraided cities in the server spreadsheet to raid {n_cities} cities')
+        print(f'Finding a path to raid all {len(unraided_cities_x)} unraided cities')
+        n_cities = len(unraided_cities_x)
 
 def get_server_end_cities(): # made with some help from Gemini
+    global unraided_cities_x, unraided_cities_z, raided_cities_x, raided_cities_z, unraided_cities_row_indexes
     print('Getting coordinates from server spreadsheet')
     gc = gspread.service_account('credentials2.json')
     worksheet = gc.open_by_key('1SASg6rYtYl2TeVTvBCNOnW6IyzbBjSlzolsEil9JPZQ').sheet1
     rows = worksheet.get_all_values()[1:]
-    unraided_cities_x, unraided_cities_z, raided_cities_x, raided_cities_z = [], [], [], []
-    for row in rows:
+    unraided_cities_x, unraided_cities_z, raided_cities_x, raided_cities_z, unraided_cities_row_indexes = [], [], [], [], []
+    for n in range(len(rows)):
+        row = rows[n]
         if row[2] != '': # if the 3rd item in an end city's row is not blank, the city has been raided
             raided_cities_x.append(int(row[0]))
             raided_cities_z.append(int(row[1]))
         else:
             unraided_cities_x.append(int(row[0]))
             unraided_cities_z.append(int(row[1]))
-    print(f'{len(unraided_cities_x) = }')
-    print(f'{len(raided_cities_x) = }')
-    return unraided_cities_x, unraided_cities_z, raided_cities_x, raided_cities_z
-
-def mark_tour_as_raided(tour): # made with help from Gemini
-    print('Updating server spreadsheet with raided cities...')
-    gc = gspread.service_account('credentials2.json')
-    worksheet = gc.open_by_key('1SASg6rYtYl2TeVTvBCNOnW6IyzbBjSlzolsEil9JPZQ').sheet1
-    batch_data = []
-    for city_index in tour:
-        row_number = city_index + 2 
-        batch_data.append({
-            'range': f'C{row_number}',  # Column C is 'raided?'
-            'values': [['raided']]       # Must be a 2D array for gspread
-        })
-    if batch_data: # Send all updates to Google Sheets in one single network request
-        worksheet.batch_update(batch_data)
-        print(f'Successfully marked {len(tour)} cities as raided!')
-    else:
-        print('No cities to update.')
+            unraided_cities_row_indexes.append(n+2)
+    print(f'The server spreadsheet has the coordinates of {len(unraided_cities_x)} unraided and {len(raided_cities_x)} raided end cities')
 
 def choose_first_end_city():
     global fig, ax, ax2background
@@ -64,10 +52,11 @@ def choose_first_end_city():
     plt.xlabel("X-axis")
     plt.ylabel("Y-axis")
     max_x, min_x, max_z, min_z = max(unraided_cities_x), min(unraided_cities_x), max(unraided_cities_z), min(unraided_cities_z)
+    border = (max_x - min_x + max_z - min_z)/150 + 500
     ax.scatter(unraided_cities_x, unraided_cities_z, [7 for _ in range(len(unraided_cities_x))], [[0,0,0] for _ in range(len(unraided_cities_z))], picker=True, label='unraided_cities')
     ax.scatter(raided_cities_x, raided_cities_z, [7 for _ in range(len(raided_cities_x))], [[1,0,0] for _ in range(len(raided_cities_x))], label = 'raided_cities')
     ax.plot([])
-    ax.set(xlim=(min_x, max_x), ylim=(min_z, max_z))
+    ax.set(xlim=(min_x-border, max_x+border), ylim=(max_z+border, min_z-border))
     fig.canvas.draw()
     fig.canvas.manager.window.wm_geometry("+%d+%d" % (0, 0)) # move figure to top right of screen
     ax2background = fig.canvas.copy_from_bbox(ax.bbox)
@@ -82,38 +71,45 @@ def click_city(event): # when you click on your first city, this function is cal
         ind = event.ind
         first_city_x, first_city_z = unraided_cities_x[ind[0]], unraided_cities_z[ind[0]]
         print(f'You have picked your first city to be at {unraided_cities_x[ind[0]], unraided_cities_z[ind[0]]}')
+        fig.clf()
         get_a_path(first_city_x, first_city_z) # this finds a path that you will use for end raiding
+        timer = fig.canvas.new_timer(interval=10)
+        timer.add_callback(plt.close)
+        timer.start()
 
 def get_a_path(first_city_x, first_city_z):
     global city_list, complex_cities
-    plt.close()
     limit = 2000 * n_cities ** 0.5 + 80 * n_cities
     max_x, min_x, max_z, min_z = first_city_x + limit, first_city_x - limit, first_city_z + limit, first_city_z - limit
-    city_x, city_z, city_list = closest_cities(max_x, min_x, max_z, min_z, unraided_cities_x, unraided_cities_z)
+    city_x, city_z, city_list, _ = closest_cities(max_x, min_x, max_z, min_z, unraided_cities_x, unraided_cities_z)
     make_distance_array()
     start_canvas(city_x, city_z, city_x, city_z)
     index_list, path_city_list = nearest_neighbor(city_list.index([first_city_x, first_city_z]))
     path_city_x, path_city_z = [c[0] for c in path_city_list], [c[1] for c in path_city_list]
     max_x, min_x, max_z, min_z = max(path_city_x), min(path_city_x), max(path_city_z), min(path_city_z)
-    border = (max_x - min_x + max_z - min_z)/40 + 1000
-    city_x, city_z, city_list = closest_cities(max_x+border, min_x-border, max_z+border, min_z-border, unraided_cities_x, unraided_cities_z)
+    border = (max_x - min_x + max_z - min_z)/40 + 2000
+    city_x, city_z, city_list, original_indexes = closest_cities(max_x+border, min_x-border, max_z+border, min_z-border, unraided_cities_x, unraided_cities_z)
     index_list = [city_list.index(city) for city in path_city_list]
     path_city_x, path_city_z = [c[0] for c in path_city_list], [c[1] for c in path_city_list]
     make_distance_array()
     city_array = np.array(city_list)
     complex_cities = city_array[:,0] + 1j*city_array[:,1]
     original_distance = find_total_distance(index_list)
-    plt.close()
-    start_canvas(path_city_x, path_city_z, city_x, city_z)
+    fig.clf()
+    start_canvas(path_city_x, path_city_z, city_x, city_z, index_list)
+    line1.set_data(extract_points(index_list))
+    ax.draw_artist(line1)
+    fig.canvas.blit(fig.bbox)
+    fig.canvas.flush_events()
     tour = use_all_methods(index_list, original_distance)
-    print(f'city_coordinates = ({[city_list[city] for city in tour]}')
-    update_waypoints(tour)
-    plt.close()
+    print(f"Coordinates of cities in path = {str([city_list[city] for city in tour])[1:-1].replace('[', '(').replace(']', ')')}")
+    update_waypoints(tour, original_indexes)
 
-def closest_cities(max_x, min_x, max_z, min_z, cities_x, cities_z):
+def closest_cities(max_x, min_x, max_z, min_z, cities_x, cities_z, ignore_minimum=False):
     city_x = []
     city_z = []
     city_list = []
+    original_indexes = []
     for n in range(len(cities_x)):
         if min_x < cities_x[n] < max_x and min_z < cities_z[n] < max_z:
             x = int(cities_x[n])
@@ -121,35 +117,41 @@ def closest_cities(max_x, min_x, max_z, min_z, cities_x, cities_z):
             city_x.append(x)
             city_z.append(z)
             city_list.append([x, z])
-    return city_x, city_z, city_list
+            original_indexes.append(n)
+    if ignore_minimum or (len(city_list) > 1.5*n_cities) or (len(city_list) == len(unraided_cities_x)):
+        return city_x, city_z, city_list, original_indexes
+    else: # the area we were looking in probably did not have enough unraided cities to make a well-optimized tour, so let's try again with a larger area
+        return closest_cities(max_x+1000, min_x-1000, max_z+1000, min_z-1000, cities_x, cities_z)
 
-def start_canvas(path_city_x, path_city_z, city_x, city_z):
+def start_canvas(path_city_x, path_city_z, city_x, city_z, tour = []):
     global fig, ax, line1, line2, line3, line4, ax2background, suptitle, renderer, title_background
-    fig, ax = plt.subplots(1, 1, figsize=((6.5,6)))
+    ax = fig.add_subplot(1, 1, 1)
     suptitle = fig.suptitle(70*" "+"\n"+70*" ") # A long blank title that takes up two lines
     ax.set_aspect('equal')
     plt.xlabel("X-axis")
-    plt.ylabel("Y-axis")
+    plt.ylabel("Z-axis")
     line1, = ax.plot([])
     line2, = ax.plot([])
     line3, = ax.plot([])
     line4, = ax.plot([])
     max_x, min_x, max_z, min_z =  max(city_x), min(city_x), max(city_z), min(city_z)
-    o_city_x, o_city_z, _ = closest_cities(max_x, min_x, max_z, min_z, unraided_cities_x, unraided_cities_z)
+    border = (max_x - min_x + max_z - min_z)/150 + 500
+    o_city_x, o_city_z, _, _ = closest_cities(max_x, min_x, max_z, min_z, unraided_cities_x, unraided_cities_z)
     ax.plot(o_city_x, o_city_z, '.', color='lawngreen')
     ax.plot(path_city_x, path_city_z, 'k.')
-    r_city_x, r_city_z, _ = closest_cities(max_x, min_x, max_z, min_z, raided_cities_x, raided_cities_z)
+    r_city_x, r_city_z, _, _ = closest_cities(max_x, min_x, max_z, min_z, raided_cities_x, raided_cities_z, True)
     ax.plot(r_city_x, r_city_z, 'r.')
-    width = max_x - min_x
-    height = max_z - min_z
-    ax.set(xlim=(min_x - width*0.05, max_x + width*0.05,), ylim=(min_z - height*0.05, max_z + height*0.05))
+    ax.set(xlim=(min_x - border, max_x + border,), ylim=(max_z + border, min_z - border))
     fig.canvas.manager.window.wm_geometry("+%d+%d" % (0, 0)) # move the figure to top right corner of the screen
     plt.show(block=False)
     renderer = fig.canvas.get_renderer()
     title_bbox = suptitle.get_window_extent(renderer=renderer).expanded(1.1, 1.3)
     fig.canvas.draw()
     title_background = fig.canvas.copy_from_bbox(title_bbox)
-    suptitle.set_text("Running Nearest Neighbor Algorithm")
+    if tour != []:
+        suptitle.set_text("Initializing Canvas")
+    else:
+        suptitle.set_text("Running Nearest Neighbor Algorithm")
     ax2background = fig.canvas.copy_from_bbox(ax.bbox)
     fig.canvas.blit(title_bbox)
     fig.canvas.flush_events()
@@ -216,21 +218,26 @@ def find_total_distance(tour): # find the total distance of a tour
     cities = complex_cities[tour]
     return np.sum(abs(cities[1:]-cities[:-1])) # suprisingly, this is actually the fastest way I've found so far to calculate the length of a tour
 
+def to_ordinal_num(n): # from: Thad Guidry
+    return str(n) + {1: 'st', 2: 'nd', 3: 'rd'}.get(4 if 10 <= n % 100 < 20 else n % 10, "th")
+
 def use_all_methods(tour, original_distance): # This function controls which algorithms the program uses. Some get less efficient as the number of end cities you want to raid increases
-    ordinal = ['0th','1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th','11th','12th']
     loop_number = 1
     create_masks()
     n_changes = {'Flip Segments': 1, 'Move Segments': 1, 'Add New Points': 1}
     all_methods = {'Flip Segments': flip_segments, 'Move Segments': move_segments, 'Add New Points': add_new_points}
     while True:
         for method in all_methods:
+            current_distance = find_total_distance(tour)
             if sum(n_changes.values()) - n_changes[method] != 0:
-                update_title(find_total_distance(tour), original_distance, method)
-                print(f'\nStarting {method} Algorithm for the {ordinal[loop_number]} time')
-                tour, n_changes[method] = all_methods[method](tour, original_distance)
+                update_title(current_distance, original_distance, method)
+                print(f'\nStarting {method} algorithm for the {to_ordinal_num(loop_number)} time')
+                tour, n_changes[method] = all_methods[method](tour, original_distance, current_distance)
+                if n_changes[method] == 0:
+                    print(f'No shorter paths found using {method} algorithm')
             else:
-                print('\nTour optimization complete\n')
-                draw_title(f'Distance = {find_total_distance(tour):.3f}, Improvement = {(100*(original_distance - find_total_distance(tour))/original_distance):.2f}%\nOptimization Completed')
+                print('\nPath optimization complete\n')
+                draw_title(f'Distance = {current_distance:.3f}, Improvement = {(100*(original_distance - current_distance)/original_distance):.2f}%\nOptimization Completed')
                 return tour
         loop_number += 1
 
@@ -242,8 +249,7 @@ def create_masks():
     condition = "((n-s+2 >= 0) & (-s+i-1 >= 0) | (n-s+2 <= 0) & (-s+i-1 <= 0) | (n-s+2 == 0) | (-s+i-1 == 0)) & (i<=n)"
     mask_3D = ne.evaluate(condition)
 
-def flip_segments(tour, original_distance): # This function will create a distance array that will calculate the change in distance for each value of i and n and choose the highest values
-    predicted_distance = find_total_distance(tour) # this sets the initial predicted distance as the original distance. It will help verify the predictions of the array later
+def flip_segments(tour, original_distance, predicted_distance): # This function will create a distance array that will calculate the change in distance for each value of i and n and choose the highest values
     f = len(tour) - 1
     n_changes = 0
     while True: # This will repeat until the loop is broken when val_max < 0
@@ -268,8 +274,7 @@ def flip_segments(tour, original_distance): # This function will create a distan
                 draw_tour(predicted_distance, original_distance, "Flip Segments", tour, [tour[i-1], tour[i]], [tour[n], tour[n+1]])
             return tour, n_changes
 
-def move_segments(tour, original_distance): # This function will create a distance array that will calculate the change in distance for each value of i, n and s and choose the highest values
-    predicted_distance = find_total_distance(tour)
+def move_segments(tour, original_distance, predicted_distance): # This function will create a distance array that will calculate the change in distance for each value of i, n and s and choose the highest values
     f = len(tour) - 1
     n_changes = 0
     while True:
@@ -303,15 +308,17 @@ def move_segments(tour, original_distance): # This function will create a distan
             n_changes += 1
             if i != 0 and n != f and s != 0: # plot the new tour
                 draw_tour(predicted_distance, original_distance, "Move Segments", tour, [tour[i-1], tour[i]], [tour[n], tour[n+1]], [tour[s-1], tour[s]])
-            tour, _ = flip_segments(tour, original_distance) # this calls the flip_segments function to see if it can make any quick positive changes before move_segments gives it another go
+            tour, _ = flip_segments(tour, original_distance, predicted_distance) # this calls the flip_segments function to see if it can make any quick positive changes before move_segments gives it another go
             predicted_distance = find_total_distance(tour) # update the current length of the tour
         else: # if there are no changes the algorithm can make that will make the tour shorter
             if n_changes != 0 and i != 0 and n != f and s != 0:
                 draw_tour(predicted_distance, original_distance, "Move Segments", tour, [tour[i-1], tour[i]], [tour[n], tour[n+1]], [tour[s-1], tour[s]])
             return tour, n_changes
 
-def add_new_points(tour, original_distance):
-    predicted_distance = find_total_distance(tour)
+def add_new_points(tour, original_distance, predicted_distance):
+    if len(unraided_cities_x) == n_cities:
+        print(f'No unraided cities could be added to the path because all unraided cities are already on the path')
+        return tour, 0
     f = len(tour) - 1 # index of final point
     n_changes = 0
     while True:
@@ -352,9 +359,8 @@ def check_predictions(tour, predicted_distance, if_print): # verify if the predi
     actual_distance = find_total_distance(tour) # calculate the actual length of the tour
     error = abs(predicted_distance - actual_distance)
     if error > 1.87e-9: # if the change in the tour length is larger than the allowable error
-        print(f'the change in distance was not exactly what we expected it to be!')  # print in the terminal if the error in predicted distance is greater than the error tolerance
+        print(f'The change in distance was not exactly what we expected it to be!')  # print in the terminal if the error in predicted distance is greater than the error tolerance
         print(f'predicted_distance - actual_distance = {predicted_distance - actual_distance}') # print the value of the error in predicted distance
-        time.sleep(1)
     elif if_print: # if if_print = True, tell the user if the predicted distance is correct
         print(f'Congrats! We found a new shorter path with a distance of {actual_distance}') # print in the terminal to let the user know that a shorter path has been found! =D
     return actual_distance # return the value of the actual distance for use in future calculations
@@ -365,15 +371,26 @@ def correct_starting_point(tour): # this isn't currently being used
     if distance_to_start > distance_to_end:
         return tour[::-1]
 
-def update_waypoints(tour): # this functions updates the waypoints as users tell the program that they have visited the cities
+def update_waypoints(tour, original_indexes): # this functions updates the waypoints as users tell the program that they have visited the cities
+    gc = gspread.service_account('credentials2.json')
+    worksheet = gc.open_by_key('1SASg6rYtYl2TeVTvBCNOnW6IyzbBjSlzolsEil9JPZQ').sheet1
     for n in range(1+len(tour)//n_waypoints):
         create_waypoint_text(tour[n*n_waypoints:(n+1)*n_waypoints]) # ths will probably need to be adjusted later for the 1st batch of points in a tour, which might not be divisible by 12
-        next = input(f'\nHit enter when you want to display the next set of waypoints')
-        mark_tour_as_raided(tour[n*n_waypoints:(n+1)*n_waypoints])
-        # gc = gspread.service_account('credentials2.json')
-        # worksheet = gc.open_by_key('1SASg6rYtYl2TeVTvBCNOnW6IyzbBjSlzolsEil9JPZQ').sheet1
-        # for city_index in tour:
-        #     worksheet.update(f'B{city_index + 2}', 'raided')
+        input(f'\nHit enter when you want to display the next set of waypoints')
+        print('Updating server spreadsheet with raided cities')
+        batch_data = []
+        for city_index in tour[n*n_waypoints:(n+1)*n_waypoints]:
+            x, z = city_list[city_index]
+            raided_city_index = -1
+            for i in original_indexes:
+                if unraided_cities_x[i] == x and unraided_cities_z[i] == z:
+                    raided_city_index = i
+            if raided_city_index == -1:
+                print(f'WARNING: No cities in the original_indexes of unraided_cities match the city we are looking for with {x = } and {z = }')
+            row_number = unraided_cities_row_indexes[raided_city_index]
+            batch_data.append({'range': f'C{row_number}', 'values': [['raided']]})
+        worksheet.batch_update(batch_data)
+        print(f'Marked {len(tour[n*n_waypoints:(n+1)*n_waypoints])} cities as raided')
 
 def create_waypoint_text(next_tour_points): # this deletes all end waypoints and makes new ones
     colors = [4,12,6,14,10,2,11,3,9,1,13,5,0,8,7,15]
