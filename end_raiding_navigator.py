@@ -7,7 +7,7 @@ import numpy as np
 np.set_printoptions(precision = 7, suppress = True, linewidth = 170) # this is just my personal preference for how I like numpy to print numbers
 
 # Change the file path below to match the file path of your waypoint file for Xaeros Minimap
-waypoint_file = r'C:\Users\User\curseforge\minecraft\Instances\Xareos Minimap and Worldmap\XaeroWaypoints\Multiplayer_mogswamp.apexmc.co\dim%1\mw$default_1.txt'
+waypoint_file = r'C:\Users\User\curseforge\minecraft\Instances\InstanceName\xaero\minimap\Multiplayer_play.flatnet.gg\dim%1\mw$default_1.txt'
 n_waypoints = 12 # this is the default number of cities to display all at once because it's the most colors you can have in a rainbow sequence
 
 def main():
