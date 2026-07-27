@@ -402,7 +402,6 @@ def update_waypoints(tour, original_indexes): # this functions updates the waypo
             f.writelines("".join(row) + "\n")
 
 def get_first_waypoint_rows():
-    # first_waypoint_rows = ['#','#waypoint:name:initials:x:y:z:color:disabled:type:set:rotate_on_tp:tp_yaw:visibility_type:destination','#']
     first_waypoint_rows = []
     with open(waypoint_file, "r") as f:
         reader = csv.reader(f)
