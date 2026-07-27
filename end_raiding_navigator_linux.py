@@ -1,3 +1,4 @@
+import csv
 import gspread
 import importlib
 import matplotlib
@@ -285,13 +286,14 @@ def draw_nearest_neighbor(blue_line, red_line):
     fig.canvas.blit(ax.bbox)
     fig.canvas.flush_events()
 
-def draw_tour(new_shortest_distance, original_distance, algorithm_name, blue_line, first_red_segment, second_red_segment = None, third_red_segment = None):
+def draw_tour(new_shortest_distance, original_distance, algorithm_name, blue_line, first_red_segment = None, second_red_segment = None, third_red_segment = None):
     fig.canvas.restore_region(ax2background)
     line1.set_data(extract_points(blue_line))
     ax.draw_artist(line1)
-    line2.set_data(extract_points(first_red_segment))
-    line2.set_color('red')
-    ax.draw_artist(line2)
+    if first_line_segment != None:
+        line2.set_data(extract_points(first_red_segment))
+        line2.set_color('red')
+        ax.draw_artist(line2)
     if second_red_segment != None:
         line3.set_data(extract_points(second_red_segment))
         line3.set_color('red')
@@ -333,7 +335,7 @@ def use_all_methods(tour, original_distance): # This function controls which alg
     while True:
         for method in all_methods:
             current_distance = find_total_distance(tour)
-            if sum(n_changes.values()) - n_changes[method] != 0:
+            if sum(n_changes.values()) - n_changes[method] != 0 or loop_number == 1:
                 update_title(current_distance, original_distance, method)
                 print(f'\nStarting {method} algorithm for the {to_ordinal_num(loop_number)} time')
                 tour, n_changes[method] = all_methods[method](tour, original_distance, current_distance)
@@ -373,9 +375,9 @@ def flip_segments(tour, original_distance, predicted_distance): # This function 
             n_changes += 1
             if i != 0 and n != f: # plot the new tour
                 draw_tour(predicted_distance, original_distance, "Flip Segments", tour, [tour[i-1], tour[i]], [tour[n], tour[n+1]])
+            else:
+                draw_tour(predicted_distance, original_distance, "Flip Segments", tour)
         else: # if there are no changes the algorithm can make that will make the tour shorter
-            if n_changes != 0 and i != 0 and n != f:
-                draw_tour(predicted_distance, original_distance, "Flip Segments", tour, [tour[i-1], tour[i]], [tour[n], tour[n+1]])
             return tour, n_changes
 
 def move_segments(tour, original_distance, predicted_distance): # This function will create a distance array that will calculate the change in distance for each value of i, n and s and choose the highest values
@@ -412,11 +414,11 @@ def move_segments(tour, original_distance, predicted_distance): # This function 
             n_changes += 1
             if i != 0 and n != f and s != 0: # plot the new tour
                 draw_tour(predicted_distance, original_distance, "Move Segments", tour, [tour[i-1], tour[i]], [tour[n], tour[n+1]], [tour[s-1], tour[s]])
+            else:
+                draw_tour(predicted_distance, original_distance, "Move Segments", tour)
             tour, _ = flip_segments(tour, original_distance, predicted_distance) # this calls the flip_segments function to see if it can make any quick positive changes before move_segments gives it another go
             predicted_distance = find_total_distance(tour) # update the current length of the tour
         else: # if there are no changes the algorithm can make that will make the tour shorter
-            if n_changes != 0 and i != 0 and n != f and s != 0:
-                draw_tour(predicted_distance, original_distance, "Move Segments", tour, [tour[i-1], tour[i]], [tour[n], tour[n+1]], [tour[s-1], tour[s]])
             return tour, n_changes
 
 def add_new_points(tour, original_distance, predicted_distance):
@@ -454,9 +456,9 @@ def add_new_points(tour, original_distance, predicted_distance):
             n_changes += 1
             if n_ind-1 >= 0 and n_ind+1 <= f: # plot the new tour
                 draw_tour(predicted_distance, original_distance, "Add New Points", tour, [tour[n_ind-1],tour[n_ind],tour[n_ind+1]])
+            else:
+                draw_tour(predicted_distance, original_distance, "Add New Points", tour)
         else: # if there are no changes the algorithm can make that will make the tour shorter
-            if n_changes != 0 and n_ind-1 >= 0 and n_ind+1 <= f:
-                draw_tour(predicted_distance, original_distance, "Add New Points", tour, [tour[n_ind-1],tour[n_ind],tour[n_ind+1]])
             return tour, n_changes
         
 def check_predictions(tour, predicted_distance, if_print): # verify if the predictions made by the distance matrix are accurate
@@ -476,39 +478,58 @@ def correct_starting_point(tour): # this isn't currently being used
         return tour[::-1]
 
 def update_waypoints(tour, original_indexes): # this functions updates the waypoints as users tell the program that they have visited the cities
-    gc = gspread.service_account('/home/Dumy/Documents/MogSwamp-End-Raiding-Project-Python-Programs/credentials2.json')
+    first_waypoint_rows = get_first_waypoint_rows()
+    gc = gspread.service_account('credentials2.json')
     worksheet = gc.open_by_key('1SASg6rYtYl2TeVTvBCNOnW6IyzbBjSlzolsEil9JPZQ').sheet1
     for n in range(1+len(tour)//n_waypoints):
-        create_waypoint_text(tour[n*n_waypoints:(n+1)*n_waypoints]) # ths will probably need to be adjusted later for the 1st batch of points in a tour, which might not be divisible by 12
-        input(f'\nHit enter when you want to display the next set of waypoints')
-        if write_to_spreadsheet:
-            print('Updating server spreadsheet with raided cities')
-            batch_data = []
-            for city_index in tour[n*n_waypoints:(n+1)*n_waypoints]:
-                x, z = city_list[city_index]
-                raided_city_index = -1
-                for i in original_indexes:
-                    if unraided_cities_x[i] == x and unraided_cities_z[i] == z:
-                        raided_city_index = i
-                if raided_city_index == -1:
-                    print(f'WARNING: No cities in the original_indexes of unraided_cities match the city we are looking for with {x = } and {z = }')
-                row_number = unraided_cities_row_indexes[raided_city_index]
-                batch_data.append({'range': f'C{row_number}', 'values': [['raided']]})
-            worksheet.batch_update(batch_data)
-            print(f'Marked {len(tour[n*n_waypoints:(n+1)*n_waypoints])} cities as raided')
+        create_waypoint_text(tour[n*n_waypoints:(n+1)*n_waypoints], first_waypoint_rows)
+        if n!=len(tour)//n_waypoints:
+            input(f'\nHit enter when you want to display the next set of waypoints')
         else:
-            print('Skipping spreadsheet update (write_to_spreadsheet is set to False)')
+            input(f'\nCongrats! This is your last set of waypoints. Hit enter to mark them as raided and remove them from your waypoint file')
+        first_waypoint_rows = get_first_waypoint_rows() # this runs each loop so that if the user adds more waypoints during the loop, they are not removed at the end of the loop
+        print('Updating server spreadsheet with raided cities')
+        batch_data = []
+        for city_index in tour[n*n_waypoints:(n+1)*n_waypoints]:
+            x, z = city_list[city_index]
+            raided_city_index = -1
+            for i in original_indexes:
+                if unraided_cities_x[i] == x and unraided_cities_z[i] == z:
+                    raided_city_index = i
+            if raided_city_index == -1:
+                print(f'WARNING: No cities in the original_indexes of unraided_cities match the city we are looking for with {x = } and {z = }')
+            row_number = unraided_cities_row_indexes[raided_city_index]
+            batch_data.append({'range': f'C{row_number}', 'values': [['raided']]})
+        worksheet.batch_update(batch_data)
+        print(f'Marked {len(tour[n*n_waypoints:(n+1)*n_waypoints])} cities as raided')
+    with open(waypoint_file, "r+") as f: # this removes the last set of end city waypoints from the waypoint file
+        for row in first_waypoint_rows:
+            f.writelines("".join(row) + "\n")
 
-def create_waypoint_text(next_tour_points): # this deletes all end waypoints and makes new ones
+def get_first_waypoint_rows():
+    first_waypoint_rows = []
+    with open(waypoint_file, "r") as f:
+        reader = csv.reader(f)
+        first_line = next(reader)[0]
+        if first_line == '#': # the only set in the waypoint file is the default set, so we're going to make a sets list and add EndRaidingSoftware to the front of the list so it shows up when you log in
+            first_waypoint_rows.append('sets:EndRaidingSoftware:gui.xaero_default')
+            first_waypoint_rows.append('#')
+        else: # if there is more than one waypoint set already, make EndRaidingSoftware be the first set in the list
+            first_waypoint_rows.append(f'sets:EndRaidingSoftware{str(first_line[4:]).replace(":EndRaidingSoftware", "")}')
+        for row in reader:
+            if 'EndRaidingSoftware' not in str(row):
+                first_waypoint_rows.append(row[0])
+    return first_waypoint_rows
+
+def create_waypoint_text(next_tour_points, first_waypoint_rows): # this adds the waypoints to your Minecraft instance
     colors = [4,12,6,14,10,2,11,3,9,1,13,5,0,8,7,15]
-    waypoint_text_lines = ['#','#waypoint:name:initials:x:y:z:color:disabled:type:set:rotate_on_tp:tp_yaw:visibility_type:destination','#']
+    waypoint_rows = first_waypoint_rows.copy()
     for n in range(len(next_tour_points)):
         x, z = city_list[next_tour_points[n]]
-        waypoint_text_lines.append(f'waypoint:{n+1}:{n+1}:{x}:130:{z}:{colors[n]}:false:0:gui.xaero_default:false:0:0:false')
+        waypoint_rows.append(f'waypoint:{n+1}:{n+1}:{x}:130:{z}:{colors[n]}:false:0:EndRaidingSoftware:false:0:0:false') # This adds the waypoints to a new waypoint set named EndRaidingSoftware
     with open(waypoint_file, "r+") as f:
-        for text_line in waypoint_text_lines:
-            f.writelines(text_line)
-            f.writelines("\n")
+        for row in waypoint_rows:
+            f.writelines("".join(row) + "\n")
 
 if __name__ == "__main__":
     main()
