@@ -290,7 +290,7 @@ def draw_tour(new_shortest_distance, original_distance, algorithm_name, blue_lin
     fig.canvas.restore_region(ax2background)
     line1.set_data(extract_points(blue_line))
     ax.draw_artist(line1)
-    if first_line_segment != None:
+    if first_red_segment != None:
         line2.set_data(extract_points(first_red_segment))
         line2.set_color('red')
         ax.draw_artist(line2)
