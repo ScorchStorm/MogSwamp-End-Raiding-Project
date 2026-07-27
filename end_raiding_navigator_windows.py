@@ -1,3 +1,4 @@
+import csv
 import gspread
 from matplotlib import pyplot as plt
 from mpl_interactions import panhandler, zoom_factory
